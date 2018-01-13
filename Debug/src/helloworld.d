@@ -12,6 +12,7 @@ src/helloworld.o src/helloworld.o: ../src/helloworld.c ../src/platform.h \
  ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xpseudo_asm.h \
  ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xreg_cortexa9.h \
  ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xpseudo_asm_gcc.h \
+ ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xtime_l.h \
  ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xparameters.h \
  ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/sleep.h
 
@@ -42,6 +43,8 @@ src/helloworld.o src/helloworld.o: ../src/helloworld.c ../src/platform.h \
 ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xreg_cortexa9.h:
 
 ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xpseudo_asm_gcc.h:
+
+../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xtime_l.h:
 
 ../../getting_started_with_ZYBO_bsp/ps7_cortexa9_0/include/xparameters.h:
 
