@@ -60,33 +60,35 @@
 #define BUTTONS_CHANNEL 1
 #define SWITCHES_CHANNEL 2
 #define LEDS_CHANNEL 1
-#define APROX_CYCLES_PER_SECOND 325003200; //actually 2 times more
+#define APROX_CYCLES_PER_SECOND 325003200LLU //actually 2 times more
+#define TIMER 100
 
 int getCurrPressedButton(XGpio *input);
-void blinkingLeds(XGpio *output, const int winning_led_data);
-int checkIfStart(XGpio *input, unsigned channel);
-void generateActions(int *button_actions);
-int generateRandomBetweenBetweenBetween(int min, int max);
+void blinkingLeds(XGpio *output, const int winning_led_data, const int microseconds);
+int areSwitchesUp(XGpio *input, const unsigned channel);
+int areSwitchesDown(XGpio *input, const unsigned channel);
+void generateActions(int *button_actions, const int n);
+int generateRandomBetween(const int min, const int max);
 void changeLedsData(int pressed_button, int button_actions[], int *current_led_data);
 int isButton(const int current_pressed_button);
 int sameButtonPressed(int prev_pressed_button, int currentPressedButton);
-int difussedBomb(int winning_led_data, int current_led_data);
-int generateCurrentLedData(int winning_led_data, int button_actions[]);
+int isBombDiffused(const int winning_led_data, const int current_led_data);
+int generateCurrentLedData(const int winning_led_data, int button_actions[]);
 
 int main() {
 	XGpio input, output;
-	XTime xTime;
-	XTime remaining_time = 5ULL * APROX_CYCLES_PER_SECOND
-	xil_printf("remaining_time = %llu\n", remaining_time);
-	xil_printf("remaining_time = %llu\n", 2);
-	int diffuse_flag = 0;
+	XTime xTimeCurr;
+	XTime game_ticks = TIMER * APROX_CYCLES_PER_SECOND;
+	XTime remaining_ticks;
+	XTime xTimePrev;
+	int start_flag = 0;
+	int data_initialised_flag = 0;
 	int button_actions[4];
-	int winning_led_data = 0b0101;
-	xil_printf("winning_led_data = %d\n", winning_led_data);
+	int winning_led_data;
 	int current_led_data;
 
-	int curr_pressed_button = -1,
-		prev_pressed_button = -1;
+	int curr_pressed_button; // = -1;
+	int prev_pressed_button; // = -1;
 
 	XGpio_Initialize(&input, XPAR_AXI_GPIO_0_DEVICE_ID); //initialize input XGpio variable
 	XGpio_Initialize(&output, XPAR_AXI_GPIO_1_DEVICE_ID); //initialize output XGpio variable
@@ -95,45 +97,70 @@ int main() {
 	XGpio_SetDataDirection(&output, LEDS_CHANNEL, 0x0);  //set first channel tristate buffer to output
 	init_platform();
 
-	XTime_GetTime(&xTime);
-	srand((int)xTime);
+	XTime_GetTime(&xTimeCurr);
+	srand((int)xTimeCurr);
 
-	generateActions(button_actions);
-	current_led_data = generateCurrentLedData(winning_led_data, button_actions);
-	while(1) {
-		while(remaining_time > 0){
-			XGpio_DiscreteWrite(&output, LEDS_CHANNEL, current_led_data); //set leds value
-			if(!checkIfStart(&input, SWITCHES_CHANNEL)) { //checks switches
-				blinkingLeds(&output, winning_led_data);
-			} else {
-				if(difussedBomb(winning_led_data, current_led_data)){
-					blinkingLeds(&output, winning_led_data);
-					diffuse_flag = 1;
-					break;
-				}
-				prev_pressed_button = curr_pressed_button;
-				curr_pressed_button = getCurrPressedButton(&input);
+//	generateActions(button_actions);
+//	current_led_data = generateCurrentLedData(winning_led_data, button_actions);
 
-				//check if current pressed button is realy a button and if its not the same as previous
-				if(isButton(curr_pressed_button) && !sameButtonPressed(prev_pressed_button, curr_pressed_button)) {
-					changeLedsData(curr_pressed_button, button_actions, &current_led_data);
-				}
-			}
-			XTime_GetTime(&xTime);
-			remaining_time -= xTime;
-//			printf("Time = %llu\n", remaining_time);
+	while(1){
+
+		if((areSwitchesDown(&input, SWITCHES_CHANNEL) && start_flag == 1) || data_initialised_flag == 0) {
+			start_flag = 0;
+			remaining_ticks = game_ticks;
+			winning_led_data = generateRandomBetween(1, 15); // exemple  0b0101;
+			//xil_printf("winning_led_data = %d\n", winning_led_data);
+			curr_pressed_button = -1;
+			prev_pressed_button = -1;
+			generateActions(button_actions, sizeof(button_actions) / sizeof(button_actions[0]));
+			current_led_data = generateCurrentLedData(winning_led_data, button_actions);
+			data_initialised_flag = 1;
 		}
 
-		if(diffuse_flag)
-			xil_printf("Succesfully Diffused\n");
-		else
+		if(remaining_ticks > game_ticks) {
 			xil_printf("BOOOOOOOM\n");
+			blinkingLeds(&output, 0b1111, 100000);
+			continue;
+		}
+
+		if(isBombDiffused(winning_led_data, current_led_data)){
+			xil_printf("Succesfully Diffused\n");
+			blinkingLeds(&output, winning_led_data, 500000);
+			continue;
+		}
+
+		XGpio_DiscreteWrite(&output, LEDS_CHANNEL, current_led_data); //set leds value
+
+		if(!areSwitchesUp(&input, SWITCHES_CHANNEL)) { //checks switches
+			blinkingLeds(&output, winning_led_data, 500000);
+		} else {
+			if(start_flag == 0){
+				XTime_GetTime(&xTimeCurr);
+				xTimePrev = xTimeCurr;
+				start_flag = 1;
+			}
+
+			prev_pressed_button = curr_pressed_button;
+			curr_pressed_button = getCurrPressedButton(&input);
+
+			//check if current pressed button is realy a button and if its not the same as previous
+			if(isButton(curr_pressed_button) && !sameButtonPressed(prev_pressed_button, curr_pressed_button)) {
+				changeLedsData(curr_pressed_button, button_actions, &current_led_data);
+			}
+		}
+
+		if(start_flag == 1) {
+			XTime_GetTime(&xTimeCurr);
+			remaining_ticks -= xTimeCurr - xTimePrev;
+			xTimePrev = xTimeCurr;
+		}
+
 	}
 	cleanup_platform();
 	return 0;
 }
 
-int generateCurrentLedData(int winning_led_data, int button_actions[]) {
+int generateCurrentLedData(const int winning_led_data, int button_actions[]) {
 	const int changes_number = 5;
 	int current_led_data = winning_led_data;
 	while(current_led_data == winning_led_data)
@@ -141,17 +168,16 @@ int generateCurrentLedData(int winning_led_data, int button_actions[]) {
 			int button_action = rand() % 4;
 			xil_printf("button_action%d = %d\n", i, button_action);
 			changeLedsData(button_action, button_actions, &current_led_data);
-//			xil_printf("current_led_data%d = %d\n", i, current_led_data);
 		}
-	xil_printf("current_led_data = %d\n", current_led_data);
+	//xil_printf("current_led_data = %d\n", current_led_data);
 	return current_led_data;
 }
-void blinkingLeds(XGpio *output, const int winning_led_data) {
-	int sleep_time = 500000;                    //microseconds
+
+void blinkingLeds(XGpio *output, const int winning_led_data, const int microseconds) {
 	XGpio_DiscreteWrite(output, 1, winning_led_data); //write switch data to the LEDs
-	usleep(sleep_time);
+	usleep(microseconds);
 	XGpio_DiscreteWrite(output, 1, 0b0000);     //switch leds off
-	usleep(sleep_time);
+	usleep(microseconds);
 }
 
 int sameButtonPressed(int prev_pressed_button, int currentPressedButton) {
@@ -161,7 +187,7 @@ int sameButtonPressed(int prev_pressed_button, int currentPressedButton) {
 	return result;
 }
 
-int difussedBomb(int winning_led_data, int current_led_data) {
+int isBombDiffused(const int winning_led_data, const int current_led_data) {
 	return winning_led_data == current_led_data ? 1 : 0;
 }
 
@@ -169,18 +195,21 @@ int isButton(const int current_pressed_button) {
 	return (current_pressed_button>=0 && current_pressed_button<=3) ? 1 : 0; //range of button values;
 }
 
-int checkIfStart(XGpio *input, unsigned channel) {
+int areSwitchesUp(XGpio *input, const unsigned channel) {
 	return (XGpio_DiscreteRead(input, channel) == 0b1111);
 }
 
-void generateActions(int *button_actions) {
-	button_actions[0] = 0b0110;
-	button_actions[1] = 0b1101;
-	button_actions[2] = 0b0101;
-	button_actions[3] = 0b1011;
+int areSwitchesDown(XGpio *input, const unsigned channel) {
+	return (XGpio_DiscreteRead(input, channel) == 0b0000);
 }
 
-int generateRandomBetween(int min, int max) {
+void generateActions(int *button_actions, const int n) {
+	for(int i = 0; i < n; ++i) {
+		button_actions[i] = generateRandomBetween(0b0001, 0b1110);
+	}
+}
+
+int generateRandomBetween(const int min, const int max) {
 	return rand() % (max - min + 1) + min;
 }
 
